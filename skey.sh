@@ -40,11 +40,13 @@ command_exists() {
 }
 
 # Function to run apt commands with lock checking and retries
+# IMPORTANT: This function assumes $sudoPW is set globally in the script
 run_apt_command() {
     local cmd_args=("$@")
     local retries=0
     while true; do
-        # Check for the lock file being held
+        # Check for the lock file being held using sudo directly (timestamp should allow this)
+        # If sudo asks for password here repeatedly, the timestamp might be too short in Tails
         if sudo lsof /var/lib/dpkg/lock-frontend > /dev/null || sudo lsof /var/lib/apt/lists/lock > /dev/null || sudo lsof /var/cache/apt/archives/lock > /dev/null; then
             if [ $retries -ge $MAX_APT_RETRIES ]; then
                 echo -e "${LR}Error: apt lock files are still held after $MAX_APT_RETRIES retries. Please ensure no other package managers are running and try again.${NC}"
@@ -54,21 +56,23 @@ run_apt_command() {
             sleep $APT_RETRY_DELAY
             retries=$((retries + 1))
         else
-            # Attempt to run the command
-            echo "$sudoPW" | sudo -S "${cmd_args[@]}" && break # Exit loop if command succeeds
-            # Check exit code specifically for lock errors (though lsof should catch most)
-            local exit_code=$?
-            if [ $exit_code -ne 0 ]; then
+            # Attempt to run the command using the stored password
+            echo "$sudoPW" | sudo -S "${cmd_args[@]}"
+            local exit_code=$? # Capture exit code immediately
+
+            if [ $exit_code -eq 0 ]; then
+                break # Exit loop if command succeeds
+            else
+                 # Check if the failure was due to a lock error (e.g., exit code 100 for apt)
+                 # or just retry regardless
                  if [ $retries -ge $MAX_APT_RETRIES ]; then
                     echo -e "${LR}Error: apt command failed after $MAX_APT_RETRIES retries with exit code $exit_code.${NC}"
+                    # Consider adding more specific error handling based on exit codes if needed
                     exit 1
                  fi
-                 echo -e "${Y}apt command failed, possibly due to a lock. Retrying... (Retry $((retries + 1))/$MAX_APT_RETRIES)${NC}"
+                 echo -e "${Y}apt command failed (Exit Code: $exit_code), possibly due to a lock or other issue. Retrying... (Retry $((retries + 1))/$MAX_APT_RETRIES)${NC}"
                  sleep $APT_RETRY_DELAY
                  retries=$((retries + 1))
-            else
-                 # Should not happen if command succeeded, but break just in case
-                 break
             fi
         fi
     done
@@ -112,7 +116,13 @@ clear
 echo
 echo -e "${Y}Enter sudo password once and reuse it later when needed...${NC}"
 read -r -s -p "Enter password for sudo:" sudoPW
+# Validate sudo password immediately to avoid issues later
+if ! echo "$sudoPW" | sudo -S -v; then
+    echo -e "\n${LR}Invalid sudo password. Exiting.${NC}"
+    exit 1
+fi
 echo -e "\n${G}Password Accepted.${NC}"
+
 
 #-----------------------------------------------------------------
 
@@ -135,6 +145,8 @@ fi
 
 # Copy logo file to INSTALL_DIR
 if [ -f "${LOGO_SOURCE_PATH}" ]; then
+    # Use sudo with password pipe for copying to potentially restricted areas if needed,
+    # but INSTALL_DIR is likely user-owned. cp should work without sudo here.
     cp "${LOGO_SOURCE_PATH}" "${LOGO_DEST_PATH}"
     echo -e "${G}Copied logo to ${LOGO_DEST_PATH}${NC}"
 else
