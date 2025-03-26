@@ -203,7 +203,6 @@ else
     # Apply changes immediately for current session
     eval "$COLOR_CMD"
     echo -e "${G}Terminal colors applied to current session.${NC}"
-fi
 
 #-----------------------------------------------------------------
 
