@@ -14,6 +14,8 @@ LOGO_DEST_PATH="${INSTALL_DIR}/${LOGO_NAME}" # Destination for the logo within S
 DESKTOP_FILE_NAME="SovereignKey_Setup.desktop"
 DESKTOP_FILE_DEST_DIR="/live/persistence/TailsData_unlocked/dotfiles/.local/share/applications"
 DESKTOP_FILE_DEST_PATH="${DESKTOP_FILE_DEST_DIR}/${DESKTOP_FILE_NAME}"
+MAX_APT_RETRIES=6 # Number of times to retry apt commands if lock is held
+APT_RETRY_DELAY=10 # Seconds to wait between retries
 
 #------------------------------------------------------
 # bash colors
@@ -25,7 +27,7 @@ NC="\033[0m"      # No Color
 #------------------------------------------------------
 
 # fail if a command fails and exit
-set -e
+# set -e # Temporarily disable set -e to handle apt lock checks gracefully
 
 # clear screen
 clear
@@ -37,8 +39,44 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Function to run apt commands with lock checking and retries
+run_apt_command() {
+    local cmd_args=("$@")
+    local retries=0
+    while true; do
+        # Check for the lock file being held
+        if sudo lsof /var/lib/dpkg/lock-frontend > /dev/null || sudo lsof /var/lib/apt/lists/lock > /dev/null || sudo lsof /var/cache/apt/archives/lock > /dev/null; then
+            if [ $retries -ge $MAX_APT_RETRIES ]; then
+                echo -e "${LR}Error: apt lock files are still held after $MAX_APT_RETRIES retries. Please ensure no other package managers are running and try again.${NC}"
+                exit 1
+            fi
+            echo -e "${Y}Waiting for apt lock files to be released... (Retry $((retries + 1))/$MAX_APT_RETRIES)${NC}"
+            sleep $APT_RETRY_DELAY
+            retries=$((retries + 1))
+        else
+            # Attempt to run the command
+            echo "$sudoPW" | sudo -S "${cmd_args[@]}" && break # Exit loop if command succeeds
+            # Check exit code specifically for lock errors (though lsof should catch most)
+            local exit_code=$?
+            if [ $exit_code -ne 0 ]; then
+                 if [ $retries -ge $MAX_APT_RETRIES ]; then
+                    echo -e "${LR}Error: apt command failed after $MAX_APT_RETRIES retries with exit code $exit_code.${NC}"
+                    exit 1
+                 fi
+                 echo -e "${Y}apt command failed, possibly due to a lock. Retrying... (Retry $((retries + 1))/$MAX_APT_RETRIES)${NC}"
+                 sleep $APT_RETRY_DELAY
+                 retries=$((retries + 1))
+            else
+                 # Should not happen if command succeeded, but break just in case
+                 break
+            fi
+        fi
+    done
+}
+
+
 # Check for required commands
-REQUIRED_COMMANDS=("gsettings" "dconf" "grep" "tr" "apt-get" "mkdir" "cp" "mv")
+REQUIRED_COMMANDS=("gsettings" "dconf" "grep" "tr" "apt-get" "mkdir" "cp" "mv" "lsof" "sleep")
 for cmd in "${REQUIRED_COMMANDS[@]}"; do
   if ! command_exists "$cmd"; then
     echo -e "${LR}Error: Required command '$cmd' not found. Please ensure it is installed and in your PATH.${NC}"
@@ -52,12 +90,12 @@ done
 ### Check if user really wants to install...or exit
 #
 echo
-echo -e "${Y}This script will switch the default system-wide theme, set terminal colors, run updates/upgrades, and create an Application shortcut.${NC}"
+echo -e "${Y}This script will run updates/upgrades, switch the system theme, set terminal colors, and create an Application shortcut.${NC}"
 echo
 echo -e "${LB}The following steps will be executed in the process:${NC}"
+echo "- Run apt update and upgrade (checking for locks)"
 echo "- Switch the System-Wide theme to Dark Mode"
 echo "- Set Terminal colors to Green on Black"
-echo "- Install & update apt list"
 echo "- Create an Application menu shortcut for this script"
 echo
 echo -e "${LR}Press ${NC}<enter>${LR} key to continue, or ${NC}ctrl-c${LR} to exit${NC}"
@@ -75,6 +113,18 @@ echo
 echo -e "${Y}Enter sudo password once and reuse it later when needed...${NC}"
 read -r -s -p "Enter password for sudo:" sudoPW
 echo -e "\n${G}Password Accepted.${NC}"
+
+#-----------------------------------------------------------------
+
+# Run apt update & upgrade FIRST, with lock checking
+echo
+echo -e "${Y}Running apt update and upgrade (will wait if locks are detected)...${NC}"
+run_apt_command apt-get update
+run_apt_command apt-get upgrade -y
+echo -e "${G}System Update/Upgrade Process Completed Successfully.${NC}"
+
+# Re-enable exit on error after apt commands
+set -e
 
 #-----------------------------------------------------------------
 # Create SK directory if it doesn't exist
@@ -170,12 +220,6 @@ echo -e "${G}Application shortcut created. It will appear in the menu after the 
 
 #------------------------------------------------------
 
-# Run apt update & upgrade
-echo
-echo -e "${Y}Running apt update and upgrade...${NC}"
-echo "$sudoPW" | sudo -S apt-get update
-echo "$sudoPW" | sudo -S apt-get upgrade -y
-echo -e "${G}System Update/Upgrade Process Completed Successfully.${NC}"
 echo
 echo -e "${G}--- SovereignKey Setup Complete ---${NC}"
 echo -e "${Y}You are all set! Remember to enable 'Dotfiles' in Persistent Storage settings for the shortcut to appear.${NC}"
