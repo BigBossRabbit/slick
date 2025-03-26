@@ -231,6 +231,5 @@ echo -e "${G}Application shortcut created. It will appear in the menu after the 
 
 #------------------------------------------------------
 
-echo
 echo -e "${G}--- SovereignKey Setup Complete ---${NC}"
 echo -e "${Y}You are all set! Remember to enable 'Dotfiles' in Persistent Storage settings for the shortcut to appear.${NC}"
