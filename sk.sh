@@ -14,6 +14,7 @@ DESKTOP_FILE_NAME="SovereignKey.desktop"
 DESKTOP_FILE_DEST_DIR="/home/${USER}/.local/share/applications"
 MAX_APT_RETRIES=3
 APT_RETRY_DELAY=5
+LOG_FILE="${START_DIR}/sk_install.log"
 
 #------------------------------------------------------
 # Colors
@@ -25,75 +26,115 @@ NC="\033[0m"      # No Color
 #------------------------------------------------------
 # Initial Setup
 clear
-set -e
+echo "" > "$LOG_FILE"
+echo -e "${Y}=== SovereignKey Setup for TailsOS ===${NC}" | tee -a "$LOG_FILE"
+echo "Installation log: $LOG_FILE"
 
-echo -e "${Y}=== SovereignKey Setup for TailsOS ===${NC}"
-echo
-echo -e "${Y}This script will:${NC}"
-echo "1. Configure system theme (Dark Mode)"
-echo "2. Set terminal colors (Namibian flag colors)"
-echo "3. Install Visual Studio Codium (AppImage)"
-echo "4. Create application shortcut(s)"
-echo
-echo -e "${LR}Press Enter to continue or Ctrl+C to cancel${NC}"
+# Error handler function
+error_exit() {
+    echo -e "${LR}ERROR: $1${NC}" | tee -a "$LOG_FILE"
+    exit 1
+}
+
+#------------------------------------------------------
+# Verify Requirements
+echo -e "\n${Y}=== Verifying Requirements ===${NC}" | tee -a "$LOG_FILE"
+
+# Internet check
+echo -e "${Y}Checking internet connection...${NC}" | tee -a "$LOG_FILE"
+if ! wget -q --spider https://github.com; then
+    error_exit "No internet connection detected"
+fi
+
+# Storage check
+echo -e "${Y}Checking available storage...${NC}" | tee -a "$LOG_FILE"
+MIN_SPACE=500000 # 500MB
+AVAIL_SPACE=$(df "$START_DIR" | awk 'NR==2 {print $4}')
+if [ "$AVAIL_SPACE" -lt "$MIN_SPACE" ]; then
+    error_exit "Insufficient disk space (requires at least 500MB free)"
+fi
+
+#------------------------------------------------------
+# User Confirmation
+echo -e "\n${Y}This script will:${NC}" | tee -a "$LOG_FILE"
+echo "1. Configure system theme (Dark Mode)" | tee -a "$LOG_FILE"
+echo "2. Set terminal colors (Namibian flag colors)" | tee -a "$LOG_FILE"
+echo "3. Install Visual Studio Codium (AppImage)" | tee -a "$LOG_FILE"
+echo "4. Create application shortcut(s)" | tee -a "$LOG_FILE"
+echo -e "\n${LR}Press Enter to continue or Ctrl+C to cancel${NC}"
 read -r
 
 #------------------------------------------------------
+# Begin Installation
+(
+#------------------------------------------------------
 # Sudo Setup
-echo
+echo -e "\n${Y}=== Setting Up Sudo ===${NC}" | tee -a "$LOG_FILE"
 echo -e "${Y}Enter sudo password:${NC}"
 read -r -s -p "Password: " sudoPW
-if ! echo "$sudoPW" | sudo -S -v; then
-    echo -e "\n${LR}Invalid password. Exiting.${NC}"
-    exit 1
+if ! echo "$sudoPW" | sudo -S -v 2>> "$LOG_FILE"; then
+    error_exit "Invalid sudo password"
 fi
-echo -e "\n${G}Authentication successful.${NC}"
+echo -e "\n${G}Authentication successful.${NC}" | tee -a "$LOG_FILE"
 
 #------------------------------------------------------
 # System Configuration
-echo -e "\n${Y}Configuring system...${NC}"
+echo -e "\n${Y}=== Configuring System ===${NC}" | tee -a "$LOG_FILE"
 
 # Dark Mode
-gsettings set org.gnome.desktop.interface color-scheme prefer-dark
-gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-prussiangreen-dark'
+if ! gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>> "$LOG_FILE"; then
+    echo -e "${Y}Warning: Could not set dark mode${NC}" | tee -a "$LOG_FILE"
+else
+    echo -e "${G}✓ Dark mode enabled${NC}" | tee -a "$LOG_FILE"
+fi
 
-# Terminal Colors - Namibian Flag (Blue/Red/Green on Black)
+# Terminal Colors
 PROFILE_ID=$(dconf list /org/gnome/terminal/legacy/profiles:/ | grep '^:' | head -n 1 | tr -d ':/')
 if [ -n "$PROFILE_ID" ]; then
-    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/background-color "'rgb(0,0,0)'"
-    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/foreground-color "'rgb(0,154,68)'"
-    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/bold-color "'rgb(210,16,52)'"
-    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/use-theme-colors false
-    echo -e "${G}Terminal colors configured with Namibian flag colors.${NC}"
+    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/background-color "'rgb(0,0,0)'" 2>> "$LOG_FILE"
+    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/foreground-color "'rgb(0,154,68)'" 2>> "$LOG_FILE"
+    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/bold-color "'rgb(210,16,52)'" 2>> "$LOG_FILE"
+    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/use-theme-colors false 2>> "$LOG_FILE"
+    echo -e "${G}✓ Terminal colors configured${NC}" | tee -a "$LOG_FILE"
+else
+    echo -e "${Y}Warning: Could not configure terminal colors${NC}" | tee -a "$LOG_FILE"
 fi
 
 #------------------------------------------------------
-# Package Management (Basic Updates)
-echo -e "\n${Y}Updating system packages...${NC}"
-echo "$sudoPW" | sudo -S apt-get update
-echo "$sudoPW" | sudo -S apt-get upgrade -y
+# Package Updates
+echo -e "\n${Y}=== Updating System ===${NC}" | tee -a "$LOG_FILE"
+echo "$sudoPW" | sudo -S apt-get update 2>> "$LOG_FILE"
+echo "$sudoPW" | sudo -S apt-get upgrade -y 2>> "$LOG_FILE"
+echo -e "${G}✓ System updated${NC}" | tee -a "$LOG_FILE"
 
 #------------------------------------------------------
-# VSCodium AppImage Installation
-echo -e "\n${Y}Setting up VSCodium AppImage...${NC}"
+# VSCodium Installation
+echo -e "\n${Y}=== Installing VSCodium ===${NC}" | tee -a "$LOG_FILE"
 
-# Create essential directories
-mkdir -p "${INSTALL_DIR}/Applications"
-mkdir -p "${DESKTOP_FILE_DEST_DIR}"
+# Create directory structure
+mkdir -p "${INSTALL_DIR}/Applications" 2>> "$LOG_FILE" || error_exit "Failed to create Applications directory"
 
-# Download VSCodium AppImage
+# Download VSCodium
+echo -e "${Y}Downloading VSCodium AppImage...${NC}" | tee -a "$LOG_FILE"
 CODIUM_URL="https://github.com/VSCodium/vscodium/releases/latest/download/VSCodium-$(uname -m).AppImage"
-echo -e "${Y}Downloading VSCodium...${NC}"
-wget -O "${INSTALL_DIR}/Applications/VSCodium.AppImage" "$CODIUM_URL"
+if ! wget --show-progress -O "${INSTALL_DIR}/Applications/VSCodium.AppImage" "$CODIUM_URL" 2>> "$LOG_FILE"; then
+    error_exit "Download failed"
+fi
 
-# Make executable
-chmod +x "${INSTALL_DIR}/Applications/VSCodium.AppImage"
+# Verify download
+if [ ! -s "${INSTALL_DIR}/Applications/VSCodium.AppImage" ]; then
+    error_exit "Downloaded file is empty or corrupted"
+fi
+echo -e "${G}✓ VSCodium downloaded successfully${NC}" | tee -a "$LOG_FILE"
+
+# Set permissions
+chmod +x "${INSTALL_DIR}/Applications/VSCodium.AppImage" 2>> "$LOG_FILE" || error_exit "Could not make AppImage executable"
 
 # Download icon
-wget -O "${INSTALL_DIR}/Applications/vscodium.png" "https://github.com/VSCodium/vscodium/raw/master/src/resources/linux/codium.png"
+wget -O "${INSTALL_DIR}/Applications/vscodium.png" "https://github.com/VSCodium/vscodium/raw/master/src/resources/linux/codium.png" 2>> "$LOG_FILE"
 
-# Create desktop entry
-cat > "${DESKTOP_FILE_DEST_DIR}/vscodium.desktop" << EOF
+# Create desktop file
+cat > "/tmp/vscodium.desktop" << EOF
 [Desktop Entry]
 Name=VSCodium
 Comment=Open Source VS Code
@@ -105,26 +146,32 @@ Categories=Development;
 StartupWMClass=VSCodium
 EOF
 
+mkdir -p "${DESKTOP_FILE_DEST_DIR}" 2>> "$LOG_FILE"
+mv "/tmp/vscodium.desktop" "${DESKTOP_FILE_DEST_DIR}/vscodium.desktop" 2>> "$LOG_FILE"
+echo -e "${G}✓ VSCodium desktop entry created${NC}" | tee -a "$LOG_FILE"
+
 # Setup persistence
 if [ -d "/live/persistence/TailsData_unlocked" ]; then
-    mkdir -p "/live/persistence/TailsData_unlocked/dotfiles/.local/share/applications"
-    cp "${DESKTOP_FILE_DEST_DIR}/vscodium.desktop" "/live/persistence/TailsData_unlocked/dotfiles/.local/share/applications/"
-    echo -e "${G}VSCodium will persist across reboots.${NC}"
+    mkdir -p "/live/persistence/TailsData_unlocked/dotfiles/.local/share/applications" 2>> "$LOG_FILE"
+    cp "${DESKTOP_FILE_DEST_DIR}/vscodium.desktop" "/live/persistence/TailsData_unlocked/dotfiles/.local/share/applications/" 2>> "$LOG_FILE"
+    echo -e "${G}✓ Persistent VSCodium configuration created${NC}" | tee -a "$LOG_FILE"
+else
+    echo -e "${Y}Warning: Persistence not enabled - settings won't survive reboot${NC}" | tee -a "$LOG_FILE"
 fi
 
 #------------------------------------------------------
-# SovereignKey Shortcut Creation
-echo -e "\n${Y}Creating SovereignKey shortcut...${NC}"
+# SovereignKey Shortcut
+echo -e "\n${Y}=== Creating Shortcuts ===${NC}" | tee -a "$LOG_FILE"
 
-# Copy logo if exists
-[ -f "${LOGO_SOURCE_PATH}" ] && cp "${LOGO_SOURCE_PATH}" "${LOGO_DEST_PATH}"
+if [ -f "${LOGO_SOURCE_PATH}" ]; then
+    cp "${LOGO_SOURCE_PATH}" "${LOGO_DEST_PATH}" 2>> "$LOG_FILE"
+fi
 
-# Create .desktop file
-cat > "${START_DIR}/temp.desktop" << EOF
+cat > "/tmp/sovereignkey.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Name=SovereignKey
-Comment=SovereignKey Configuration Tool
+Comment=Configuration Tool
 Exec=${START_DIR}/sk.sh
 Icon=${LOGO_DEST_PATH:-utilities-terminal}
 Terminal=true
@@ -132,17 +179,27 @@ Type=Application
 Categories=Utility;
 EOF
 
-# Install shortcut
-mv "${START_DIR}/temp.desktop" "${DESKTOP_FILE_DEST_DIR}/${DESKTOP_FILE_NAME}"
+mv "/tmp/sovereignkey.desktop" "${DESKTOP_FILE_DEST_DIR}/${DESKTOP_FILE_NAME}" 2>> "$LOG_FILE"
+echo -e "${G}✓ SovereignKey shortcut created${NC}" | tee -a "$LOG_FILE"
 
 #------------------------------------------------------
-# Completion
-echo -e "\n${G}=== Setup Complete ===${NC}"
-echo -e "${Y}System features:${NC}"
-echo "- Namibian terminal theme"
-echo "- VSCodium AppImage installed to ${INSTALL_DIR}/Applications"
-echo "- Desktop shortcuts created"
-echo -e "\n${Y}Remember to:${NC}"
-echo "1. Enable 'Dotfiles' in Persistent Storage"
-echo "2. Make sk.sh executable: chmod +x sk.sh"
-echo "3. Restart Tails for all changes to take effect"
+# Finish
+echo -e "\n${G}=== INSTALLATION COMPLETE ===${NC}" | tee -a "$LOG_FILE"
+echo -e "${Y}VSCodium is installed at:${NC}" | tee -a "$LOG_FILE"
+echo "${INSTALL_DIR}/Applications/VSCodium.AppImage" | tee -a "$LOG_FILE"
+echo -e "\n${Y}To complete setup:${NC}" | tee -a "$LOG_FILE"
+echo "1. Enable 'Dotfiles' persistence when rebooting Tails" | tee -a "$LOG_FILE"
+echo "2. Run 'chmod +x sk.sh' to make script executable" | tee -a "$LOG_FILE"
+
+exit 0
+) >> "$LOG_FILE" 2>&1
+
+# Exit with appropriate status
+if [ $? -eq 0 ]; then
+    echo -e "\n${G}Installation completed successfully!${NC}"
+    echo -e "Detailed log: $LOG_FILE"
+    exit 0
+else
+    echo -e "\n${LR}Installation failed - please check $LOG_FILE${NC}"
+    exit 1
+fi
