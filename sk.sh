@@ -61,6 +61,11 @@ if [ -n "$PROFILE_ID" ]; then
     dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/bold-color "'rgb(210,16,52)'"
     dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/use-theme-colors false
     echo -e "${G}Terminal colors configured.${NC}"
+    
+    # Force immediate terminal refresh (Option 1)
+    dconf dump /org/gnome/terminal/legacy/profiles:/ > ~/terminal_settings.dconf && \
+    dconf load /org/gnome/terminal/legacy/profiles:/ < ~/terminal_settings.dconf
+    echo -e "${Y}Terminal colors should now be visible!${NC}"
 fi
 
 #------------------------------------------------------
