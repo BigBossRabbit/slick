@@ -60,12 +60,18 @@ if [ -n "$PROFILE_ID" ]; then
     dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/foreground-color "'rgb(0,154,68)'"
     dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/bold-color "'rgb(210,16,52)'"
     dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/use-theme-colors false
-    echo -e "${G}Terminal colors configured.${NC}"
     
-    # Force immediate terminal refresh (Option 1)
-    dconf dump /org/gnome/terminal/legacy/profiles:/ > ~/terminal_settings.dconf && \
-    dconf load /org/gnome/terminal/legacy/profiles:/ < ~/terminal_settings.dconf
-    echo -e "${Y}Terminal colors should now be visible!${NC}"
+    # ANSI escape codes for immediate effect (Namibian colors)
+    COLOR_CMD='echo -e "\033]10;#009A44\007\033]11;#000000\007\033]12;#D21034\007\033]13;#0033A0\007"'
+    
+    # Add to .bashrc if not present
+    if ! grep -qF "$COLOR_CMD" ~/.bashrc; then
+        echo "$COLOR_CMD" >> ~/.bashrc
+    fi
+    
+    # Apply immediately
+    eval "$COLOR_CMD"
+    echo -e "${G}Namibian flag colors applied instantly!${NC}"
 fi
 
 #------------------------------------------------------
