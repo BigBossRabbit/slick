@@ -32,8 +32,8 @@ echo
 echo -e "${Y}This script will:${NC}"
 echo "1. Configure system theme (Dark Mode)"
 echo "2. Set terminal colors (Namibian flag colors)"
-echo "3. Install Visual Studio Codium (Official)"
-echo "4. Create application shortcut"
+echo "3. Install Visual Studio Codium (AppImage)"
+echo "4. Create application shortcut(s)"
 echo
 echo -e "${LR}Press Enter to continue or Ctrl+C to cancel${NC}"
 read -r
@@ -61,47 +61,63 @@ gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-prussiangreen-dark'
 PROFILE_ID=$(dconf list /org/gnome/terminal/legacy/profiles:/ | grep '^:' | head -n 1 | tr -d ':/')
 if [ -n "$PROFILE_ID" ]; then
     dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/background-color "'rgb(0,0,0)'"
-    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/foreground-color "'rgb(0,154,68)'" # Green
-    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/bold-color "'rgb(210,16,52)'" # Red
+    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/foreground-color "'rgb(0,154,68)'"
+    dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/bold-color "'rgb(210,16,52)'"
     dconf write /org/gnome/terminal/legacy/profiles:/:${PROFILE_ID}/use-theme-colors false
     echo -e "${G}Terminal colors configured with Namibian flag colors.${NC}"
 fi
 
 #------------------------------------------------------
-# Package Management
+# Package Management (Basic Updates)
 echo -e "\n${Y}Updating system packages...${NC}"
 echo "$sudoPW" | sudo -S apt-get update
 echo "$sudoPW" | sudo -S apt-get upgrade -y
 
 #------------------------------------------------------
-# Visual Studio Codium Installation (Official)
-echo -e "\n${Y}Installing Visual Studio Codium...${NC}"
+# VSCodium AppImage Installation
+echo -e "\n${Y}Setting up VSCodium AppImage...${NC}"
 
-# Install required dependencies
-echo "$sudoPW" | sudo -S apt-get install -y wget
+# Create essential directories
+mkdir -p "${INSTALL_DIR}/Applications"
+mkdir -p "${DESKTOP_FILE_DEST_DIR}"
 
-# Download and install from official GitHub releases
-CODIUM_URL="https://github.com/VSCodium/vscodium/releases/latest/download/codium_$(dpkg --print-architecture).deb"
-TEMP_DEB="/tmp/codium.deb"
+# Download VSCodium AppImage
+CODIUM_URL="https://github.com/VSCodium/vscodium/releases/latest/download/VSCodium-$(uname -m).AppImage"
+echo -e "${Y}Downloading VSCodium...${NC}"
+wget -O "${INSTALL_DIR}/Applications/VSCodium.AppImage" "$CODIUM_URL"
 
-wget -O "$TEMP_DEB" "$CODIUM_URL"
-echo "$sudoPW" | sudo -S dpkg -i "$TEMP_DEB"
-echo "$sudoPW" | sudo -S apt-get install -f -y  # Fix dependencies
-rm "$TEMP_DEB"
+# Make executable
+chmod +x "${INSTALL_DIR}/Applications/VSCodium.AppImage"
 
-# Create persistence config
+# Download icon
+wget -O "${INSTALL_DIR}/Applications/vscodium.png" "https://github.com/VSCodium/vscodium/raw/master/src/resources/linux/codium.png"
+
+# Create desktop entry
+cat > "${DESKTOP_FILE_DEST_DIR}/vscodium.desktop" << EOF
+[Desktop Entry]
+Name=VSCodium
+Comment=Open Source VS Code
+Exec=${INSTALL_DIR}/Applications/VSCodium.AppImage
+Icon=${INSTALL_DIR}/Applications/vscodium.png
+Terminal=false
+Type=Application
+Categories=Development;
+StartupWMClass=VSCodium
+EOF
+
+# Setup persistence
 if [ -d "/live/persistence/TailsData_unlocked" ]; then
-    mkdir -p "/live/persistence/TailsData_unlocked/dotfiles/.config/VSCodium"
-    echo -e "${G}VSCodium config will persist across reboots.${NC}"
+    mkdir -p "/live/persistence/TailsData_unlocked/dotfiles/.local/share/applications"
+    cp "${DESKTOP_FILE_DEST_DIR}/vscodium.desktop" "/live/persistence/TailsData_unlocked/dotfiles/.local/share/applications/"
+    echo -e "${G}VSCodium will persist across reboots.${NC}"
 fi
 
 #------------------------------------------------------
-# Create Application Shortcut
-echo -e "\n${Y}Creating application shortcut...${NC}"
+# SovereignKey Shortcut Creation
+echo -e "\n${Y}Creating SovereignKey shortcut...${NC}"
 
-# Create directory structure
-mkdir -p "${INSTALL_DIR}"
-[ -f "${LOGO_SOURCE_PATH" ] && cp "${LOGO_SOURCE_PATH}" "${LOGO_DEST_PATH}"
+# Copy logo if exists
+[ -f "${LOGO_SOURCE_PATH}" ] && cp "${LOGO_SOURCE_PATH}" "${LOGO_DEST_PATH}"
 
 # Create .desktop file
 cat > "${START_DIR}/temp.desktop" << EOF
@@ -117,13 +133,16 @@ Categories=Utility;
 EOF
 
 # Install shortcut
-mkdir -p "${DESKTOP_FILE_DEST_DIR}"
 mv "${START_DIR}/temp.desktop" "${DESKTOP_FILE_DEST_DIR}/${DESKTOP_FILE_NAME}"
 
 #------------------------------------------------------
 # Completion
 echo -e "\n${G}=== Setup Complete ===${NC}"
-echo -e "Terminal now features ${Y}Namibia's colors${NC} (${LR}red${NC}, ${G}green${NC}, ${LB}blue${NC}) on black background"
-echo -e "${Y}Visual Studio Codium (Official) is now installed${NC}"
-echo -e "${Y}Shortcut will be available after restarting Tails.${NC}"
-echo -e "${Y}Remember to enable 'Dotfiles' in Persistent Storage.${NC}"
+echo -e "${Y}System features:${NC}"
+echo "- Namibian terminal theme"
+echo "- VSCodium AppImage installed to ${INSTALL_DIR}/Applications"
+echo "- Desktop shortcuts created"
+echo -e "\n${Y}Remember to:${NC}"
+echo "1. Enable 'Dotfiles' in Persistent Storage"
+echo "2. Make sk.sh executable: chmod +x sk.sh"
+echo "3. Restart Tails for all changes to take effect"
