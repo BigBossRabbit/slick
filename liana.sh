@@ -9,7 +9,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-log() { echo -e "${GREEN}[INFO]${NC} 18 NAD"; }
+log() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
@@ -35,12 +35,9 @@ DOT_CONFIG="$PERSISTENT_DIR/.config"
 log "Creating directories..."
 mkdir -p "$LIANA_DIR" "$DOT_LOCAL/share/applications" "$DOT_CONFIG"
 
-# Fetch latest version dynamically (optional improvement)
+# Fetch latest version dynamically
 log "Fetching latest Liana version..."
-LIANA_VERSION="v0.3.1"  # Fallback version
-# Uncomment to fetch dynamically:
-# LIANA_VERSION=$(curl -s https://api.github.com/repos/wizardsardine/liana/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
-
+LIANA_VERSION=$(curl -s https://api.github.com/repos/wizardsardine/liana/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
 LIANA_URL="https://github.com/wizardsardine/liana/releases/download/${LIANA_VERSION}/liana-${LIANA_VERSION}-x86_64-linux-gnu.tar.gz"
 
 # Download with error checking
@@ -104,5 +101,3 @@ Comment=Bitcoin wallet with inheritance features
 EOF
 
 log "Installation complete!"
-warn "IMPORTANT: Verify the download authenticity before using with real funds"
-warn "Consider checking GPG signatures from the official release page"
