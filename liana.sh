@@ -2,6 +2,9 @@
 # lianaw.sh - Install Liana Wallet on TailsOS with persistence
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
+set -x  # Enables debug output showing commands
+
+trap 'echo "[ERROR] Error on line $LINENO: $BASH_COMMAND with exit code $?" >&2' ERR
 
 # Color codes
 RED='\033[0;31m'
