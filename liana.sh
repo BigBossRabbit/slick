@@ -38,7 +38,8 @@ mkdir -p "$LIANA_DIR" "$DOT_LOCAL/share/applications" "$DOT_CONFIG"
 # Fetch latest version dynamically
 log "Fetching latest Liana version..."
 LIANA_VERSION=$(curl -s https://api.github.com/repos/wizardsardine/liana/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
-LIANA_URL="https://github.com/wizardsardine/liana/releases/download/${LIANA_VERSION}/liana-${LIANA_VERSION}-x86_64-linux-gnu.tar.gz"
+LIANA_VERSION_CLEAN=${LIANA_VERSION#v}  # Remove leading 'v'
+LIANA_URL="https://github.com/wizardsardine/liana/releases/download/${LIANA_VERSION}/liana-${LIANA_VERSION_CLEAN}-x86_64-linux-gnu.tar.gz"
 
 # Download with error checking
 log "Downloading Liana ${LIANA_VERSION}..."
@@ -90,10 +91,10 @@ done
 # Create desktop entry (with fallback icon)
 cat > "$DOT_LOCAL/share/applications/liana.desktop" << 'EOF'
 [Desktop Entry]
-Version=1.0
+Version=13.1
 Name=Liana Wallet
 Exec=/home/amnesia/Persistent/liana/start-liana.sh
-Icon=applications-internet
+Icon=/home/amnesia/Persistent/liana/
 Terminal=false
 Type=Application
 Categories=Network;Finance;
