@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# DO NOT USE THIS SCRIPT! IT IS A COMBINATION OF DIFFERENT TEST SCRIPTS & WILL FAIL
+
 <<<<<<< HEAD
 # Script for TailsOS Persistent Storage configuration
 # Installs SovereignKey features and configures system theme
